@@ -1,0 +1,71 @@
+我想寫一個程式碼，其主要流程是:
+1.請使用者輸入地震或外力資料檔案，可以是txt或csv檔案，讀取第一行(直的)，儲存為time_column，再讀取第二行，儲存為p_column，輸出time_column及p_column
+
+2.請定義一個函數叫做central_difference_method(time, m, k, zeta, u0, v0, p):
+dt = time[1] - time[0]
+    n = len(time)
+    u = np.zeros(n)
+    v = np.zeros(n)
+    a = np.zeros(n)
+    u[0] = u0
+    v[0] = v0
+    a[0] = (p[0] - c * v[0] - k * u[0]) / m
+    k_eff = m / dt**2 + c / (2 * dt)
+    u[-1] = u[0] - dt * v[0] + 0.5 * a[0] * dt ** 2
+    A = m / dt**2 - c/ (2 * dt)
+    B = k - 2 * m / dt**2
+    for i in range(0, n-1):
+        u[i+1] = (p[i] - A * u[i-1] - B * u[i]) / k_eff
+        v[i] = (u[i+1] - u[i-1]) / (2 * dt)
+        a[i] = (u[i+1] - 2 * u[i] + u[i-1]) / dt**2
+    return u, v, a
+
+3.請定義一個函數叫linear_acceleration_method(time, m, k, zeta, u0, v0, p):
+dt = time[1] - time[0]  # 時間步長
+    n = len(time)  # 時間步數
+    # 初始化位移、速度、加速度陣列
+    u = np.zeros(n)
+    v = np.zeros(n)
+    a = np.zeros(n)
+
+    # 初始條件
+    u[0] = u0
+    v[0] = v0
+    a[0] = (p[0] - c * v[0] - k * u[0]) / m  # 計算初始加速度
+
+    # Newmark 線性加速度法的參數
+    gamma = 0.5  # Newmark 方法中的速度加權因子
+    beta = 1 / 6  # Newmark 方法中的位移加權因子
+
+    # 預計算常數
+    k_eff = k + (gamma * c) / (beta * dt) + m / (beta * dt**2)
+    A = m / (beta * dt) + c *( gamma / beta)
+    B = m / (2 * beta) + dt *( gamma /(2 * beta) -1)
+
+    # Newmark 迭代
+    for i in range(0 , n-1):
+        delta_p_head = (p[i+1] - p[i]) + A * v[i] + B * a[i]
+        delta_u = delta_p_head/ k_eff
+        delta_v = gamma* delta_u/(beta* dt) - gamma * v[i]/beta + dt * a[i] * (1 - gamma /(2 * beta))
+        delta_a = delta_u/(beta* dt**2) - v[i]/(beta*dt) - a[i]/(2 *beta)
+        u[i+1] = u[i] + delta_u
+        v[i+1] = v[i] + delta_v
+        a[i+1] = a[i] + delta_a
+
+    return u, v, a
+
+4.詢問使用者要用英制還是公制單位，以while迴圈詢問，回傳1，為公制，回傳2，為英制，若回答不為1或2，則重新回答。
+
+若使用者回答1，則
+m = 詢問使用者('結構物質量大小(kg)為何')
+k = 詢問使用者('結構物勁度(kN/m)為何')
+zeta = 詢問使用者('結構物阻尼比為何')
+u0 = 詢問使用者('結構物初始位移(m)為何')
+v0 = 詢問使用者('結構物初始速度(m/s)為何')
+
+若使用者回答2，則
+m = 詢問使用者('結構物質量大小(kip)為何')
+k = 詢問使用者('結構物勁度(kip/inch)為何')
+zeta = 詢問使用者('結構物阻尼比為何')
+u0 = 詢問使用者('結構物初始位移(inch)為何')
+v0 = 詢問使用者('結構物初始速度(inch/s)為何')

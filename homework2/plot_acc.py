@@ -30,10 +30,10 @@ def plot_acc():
         
         # 繪製圖表
         plt.figure(figsize=(10, 6))
-        plt.plot(time, acc, color='blue', linestyle='-', label='Acceleration')
+        plt.plot(time, acc, color='red', linestyle='-', label='Acceleration')
         plt.xlabel('time(s)')
         plt.ylabel('acceleration(g)')
-        plt.title(f"{earthquake_name} Acceleration vs Time")
+        plt.title(f"{earthquake_name} Acceleration Time History Data")
         plt.legend()
         plt.grid(False)  # 不顯示格線
         plt.tight_layout()
