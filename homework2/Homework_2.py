@@ -14,8 +14,9 @@ def get_user_input():
     u0 = float(input("請輸入初始位移 u0 (in)："))
     v0 = float(input("請輸入初始速度 v0 (in/s)："))
     dt = float(input("請輸入時間間隔 Δt (s)："))
-
-    return file_path, save_path, filename, W_kip, k_kip_in, zeta, u0, v0, dt
+    gamma = float(input("請輸入 Newmark 參數 δ (例如 0.5)："))  # δ → gamma
+    beta = float(input("請輸入 Newmark 參數 α (例如 0.25)："))  # α → beta
+    return file_path, save_path, filename, W_kip, k_kip_in, zeta, u0, v0, dt, gamma, beta
 
 def compute_structure_parameters(W_kip, k_kip_in, zeta):
     """計算結構參數"""
@@ -38,10 +39,8 @@ def read_earthquake_data(file_path):
     ag = data[:, 1] * 386.1  # g → in/s²
     return time, ag
 
-def average_acceleration_method(time, ag, m, k, c, u0, v0, dt):
-    """使用平均加速度法計算時間歷程分析"""
-    gamma = 0.5
-    beta = 0.25
+def perform_time_history_analysis(time, ag, m, k, c, u0, v0, dt, gamma, beta):
+    """執行時間歷程分析"""
     npts = len(ag)
     u = np.zeros(npts)
     v = np.zeros(npts)
@@ -62,63 +61,6 @@ def average_acceleration_method(time, ag, m, k, c, u0, v0, dt):
         u[i] = rhs / k_eff
         a_resp[i] = (1 / (beta * dt ** 2)) * (u[i] - u[i - 1] - dt * v[i - 1]) - (1 - 2 * beta) / (2 * beta) * a_resp[i - 1]
         v[i] = v[i - 1] + dt * ((1 - gamma) * a_resp[i - 1] + gamma * a_resp[i])
-
-    return u, v, a_resp
-
-def linear_acceleration_method(time, ag, m, k, c, u0, v0, dt):
-    """使用線性加速度法計算時間歷程分析"""
-    gamma = 0.5
-    beta = 1 / 6
-    npts = len(ag)
-    u = np.zeros(npts)
-    v = np.zeros(npts)
-    a_resp = np.zeros(npts)
-
-    u[0] = u0
-    v[0] = v0
-    p = -m * ag  # 慣性力
-    a_resp[0] = (p[0] - c * v[0] - k * u[0]) / m
-
-    k_eff = k + gamma / (beta * dt) * c + m / (beta * dt ** 2)
-
-    for i in range(1, npts):
-        rhs = p[i] + \
-              m * ((1 / (beta * dt ** 2)) * u[i - 1] + (1 / (beta * dt)) * v[i - 1] + (1 / (2 * beta) - 1) * a_resp[i - 1]) + \
-              c * ((gamma / (beta * dt)) * u[i - 1] + ((gamma / beta) - 1) * v[i - 1] + dt * ((gamma / (2 * beta)) - 1) * a_resp[i - 1])
-
-        u[i] = rhs / k_eff
-        a_resp[i] = (1 / (beta * dt ** 2)) * (u[i] - u[i - 1] - dt * v[i - 1]) - (1 - 2 * beta) / (2 * beta) * a_resp[i - 1]
-        v[i] = v[i - 1] + dt * ((1 - gamma) * a_resp[i - 1] + gamma * a_resp[i])
-
-    return u, v, a_resp
-
-def central_difference_method(time, ag, m, k, c, u0, v0, dt):
-    """使用中央差分法計算時間歷程分析"""
-    npts = len(ag)
-    u = np.zeros(npts)
-    v = np.zeros(npts)
-    a_resp = np.zeros(npts)
-
-    # 初始條件
-    u[0] = u0
-    v[0] = v0
-    a_resp[0] = (1 / m) * (-c * v[0] - k * u[0] - m * ag[0])
-
-    # 預計算常數
-    k_eff = m / dt**2 + c / (2 * dt)
-    a = m / dt**2 - c / (2 * dt)
-    b = k - 2 * m / dt**2
-
-    # 時間歷程計算
-    for i in range(1, npts - 1):
-        p_eff = -m * ag[i] - a * u[i - 1] - b * u[i]
-        u[i + 1] = p_eff / k_eff
-        v[i] = (u[i + 1] - u[i - 1]) / (2 * dt)
-        a_resp[i] = (u[i + 1] - 2 * u[i] + u[i - 1]) / dt**2
-
-    # 最後一點速度和加速度
-    v[-1] = (u[-1] - u[-2]) / dt
-    a_resp[-1] = (u[-1] - 2 * u[-2] + u[-3]) / dt**2
 
     return u, v, a_resp
 
@@ -148,7 +90,7 @@ def save_results_to_csv(time, u, v, a_resp, save_path, filename):
     df.to_csv(full_path, index=False)
     print(f"結果已儲存至：{full_path}")
 
-def plot_results(time, u1, v1, a1, u2, v2, a2, u3, v3, a3, save_path, filename):
+def plot_results(time, u, v, a_resp, save_path, filename):
     """繪製結果圖表，並儲存到指定路徑"""
     # 建立完整的儲存路徑
     displacement_path = os.path.join(save_path, f"{filename}_displacement.png")
@@ -157,63 +99,46 @@ def plot_results(time, u1, v1, a1, u2, v2, a2, u3, v3, a3, save_path, filename):
 
     # 繪製位移圖
     plt.figure(figsize=(10, 6))
-    plt.plot(time, u1, color='black', linestyle='-', linewidth=0.5, label='Average Acceleration Method')
-    plt.plot(time, u2, color='blue', linestyle='--', linewidth=0.5, label='Linear Acceleration Method')
-    plt.plot(time, u3, color='red', linestyle='-.', linewidth=0.5, label='Central Difference Method')
+    plt.plot(time, u, color='black', linestyle='-', label='Displacement')
     plt.title("Displacement vs Time")
     plt.xlabel("Time (s)")
     plt.ylabel("Displacement (in)")
-    plt.legend()
     plt.grid(True)
     plt.savefig(displacement_path)
     plt.show()
 
     # 繪製速度圖
     plt.figure(figsize=(10, 6))
-    plt.plot(time, v1, color='black', linestyle='-', linewidth=0.5, label='Average Acceleration Method')
-    plt.plot(time, v2, color='blue', linestyle='--', linewidth=0.5, label='Linear Acceleration Method')
-    plt.plot(time, v3, color='red', linestyle='-.', linewidth=0.5, label='Central Difference Method')
+    plt.plot(time, v, color='red', linestyle='-', label='Velocity')
     plt.title("Velocity vs Time")
     plt.xlabel("Time (s)")
     plt.ylabel("Velocity (in/s)")
-    plt.legend()
     plt.grid(True)
     plt.savefig(velocity_path)
     plt.show()
 
     # 繪製加速度圖
     plt.figure(figsize=(10, 6))
-    plt.plot(time, a1, color='black', linestyle='-', linewidth=0.5, label='Average Acceleration Method')
-    plt.plot(time, a2, color='blue', linestyle='--', linewidth=0.5, label='Linear Acceleration Method')
-    plt.plot(time, a3, color='red', linestyle='-.', linewidth=0.5, label='Central Difference Method')
+    plt.plot(time, a_resp, color='blue', linestyle='-', label='Acceleration')
     plt.title("Acceleration vs Time")
     plt.xlabel("Time (s)")
     plt.ylabel("Acceleration (in/s²)")
-    plt.legend()
     plt.grid(True)
     plt.savefig(acceleration_path)
     plt.show()
 
 def main():
     """主程式流程"""
-    file_path, save_path, filename, W_kip, k_kip_in, zeta, u0, v0, dt = get_user_input()
+    file_path, save_path, filename, W_kip, k_kip_in, zeta, u0, v0, dt, gamma, beta = get_user_input()
     m, k, c = compute_structure_parameters(W_kip, k_kip_in, zeta)
     time, ag = read_earthquake_data(file_path)
-
-    # 使用平均加速度法計算
-    u1, v1, a1 = average_acceleration_method(time, ag, m, k, c, u0, v0, dt)
-
-    # 使用線性加速度法計算
-    u2, v2, a2 = linear_acceleration_method(time, ag, m, k, c, u0, v0, dt)
-
-    # 使用中央差分法計算
-    u3, v3, a3 = central_difference_method(time, ag, m, k, c, u0, v0, dt)
-
-    # 儲存結果到 CSV（僅儲存平均加速度法的結果）
-    save_results_to_csv(time, u1, v1, a1, save_path, filename)
-
+    u, v, a_resp = perform_time_history_analysis(time, ag, m, k, c, u0, v0, dt, gamma, beta)
+    
+    # 儲存結果到 CSV
+    save_results_to_csv(time, u, v, a_resp, save_path, filename)
+    
     # 繪製圖表並儲存圖片
-    plot_results(time, u1, v1, a1, u2, v2, a2, u3, v3, a3, save_path, filename)
+    plot_results(time, u, v, a_resp, save_path, filename)
 
 if __name__ == "__main__":
     main()
