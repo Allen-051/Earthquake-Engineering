@@ -122,10 +122,11 @@ def central_difference_method(time, ag, m, k, c, u0, v0, dt):
 
     return u, v, a_resp
 
-def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta=1.4, tol=1e-6, max_iter=100):
+def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta, wn):
     """改進的 Wilson's θ 方法計算時間歷程分析"""
     gamma = 0.5
     beta = 1 / 6
+    theta = 1.4
     npts = len(ag)
     u = np.zeros(npts)
     v = np.zeros(npts)
@@ -134,29 +135,11 @@ def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta=1.4, tol=1e-6, max
     # 初始條件
     u[0] = u0
     v[0] = v0
-    a_resp[0] = (1 / m) * (-c * v[0] - k * u[0] - m * ag[0])
+    a_resp[0] = -2 * c* wn * v[0] -wn**2 * u[0] + ag[0] /m
 
     # 預計算常數
-    k_eff = k + (theta / (beta * dt ** 2)) * m + (theta * gamma / (beta * dt)) * c
-
-    for i in range(1, npts):
-        # 預測力項
-        p_theta = -m * ag[i] + (1 - theta) * (-m * ag[i - 1]) + \
-                  m * ((1 - theta) * (1 / (beta * dt ** 2)) * u[i - 1] + (1 - theta) * (1 / (beta * dt)) * v[i - 1]) + \
-                  c * ((1 - theta) * (gamma / (beta * dt)) * u[i - 1] + (1 - theta) * ((gamma / beta) - 1) * v[i - 1])
-
-        # 初始位移估計
-        u_theta = u[i - 1]
-        for _ in range(max_iter):
-            # 計算內力
-            
-            f_int = k * u_theta + c * ((gamma / (beta * dt)) * (u_theta - u[i - 1]) + (1 - gamma / beta) * v[i - 1] + dt * (1 - gamma / (2 * beta)) * a_resp[i - 1])
-            # 更新位移
-            delta_u = (p_theta - f_int) / k_eff
-            u_theta += delta_u
-            # 檢查收斂
-            if np.abs(delta_u).max() < tol:
-                break
+    Beta = 1 + c* wn * theta *dt + 1/6 * wn **2 * theta ** 2 * dt ** 2
+    matrix_A = []
 
         # 更新位移
         u[i] = u_theta
