@@ -132,23 +132,23 @@ def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta, wn):
     # 初始條件
     u[0] = u0
     v[0] = v0
-    a_resp[0] = -2 * c* wn * v0 -wn**2 * u0 + ag[0] / m
+    a_resp[0] = -2 * c* wn * v0 - wn**2 * u0 - ag[0]
 
     # 預計算常數
-    beta = 1 + c* wn * theta *dt + 1/6 * wn **2 * theta ** 2 * dt ** 2
-    gamma = c * wn *theta *dt +1/3* wn **2 * theta ** 2 * dt ** 2
+    beta = 1 + c* wn * theta *dt + 1/6 * (wn * theta * dt )** 2
+    gamma = c * wn * theta *dt + 1/3 * ( wn * theta * dt )** 2
     
     a_w = np.array([
-    [(beta -1/6*wn**2*theta**2*dt**2)/beta , (beta*dt-1/3*c*wn*theta**2*dt**2-1/6*wn**2*theta**2*dt**3)/beta , (2*beta-theta-gamma+1)*theta*dt**2/(6*beta)],
-    [(-0.5*wn**2*theta*dt)/beta, (beta-c*wn*theta*dt-0.5*wn**2*theta*dt**2)/beta , (beta-theta-gamma+1)*dt/(2*beta)],
-    [-wn**2/beta , (-2 * c * wn - wn**2*dt)/beta , (beta*theta -theta-gamma-beta+1)/(theta*beta)]])
+    [(beta -1/6*(wn*theta*dt)**2)/beta , (beta*dt - 1/3*c*wn*(theta*dt)**2 - 1/6*(wn*theta)**2*dt**3)/beta , (2*beta-theta-gamma+1)*theta*dt**2/(6*beta)],
+    [(-0.5*wn**2*theta*dt)/beta, (beta - c*wn*theta*dt - 0.5*wn**2*theta*dt**2)/beta , (beta - theta - gamma + 1)*dt/(2*beta)],
+    [-wn**2/beta , (-2 * c * wn - wn**2*dt)/beta , (beta*theta - theta - gamma - beta + 1)/(theta*beta)]])
 
-    b_w = np.array([(1/6 *theta**2 *dt**2)/(m*beta), (1/2* theta * dt)/(m*beta), (1/m * beta)])
+    b_w = np.array([(1/6 *(theta *dt)**2)/(m*beta), (1/2* theta * dt)/(m*beta), (1/m * beta)])
     
     for j in range(len(ag) - 1):
         X_j = np.array([u[j], v[j], a_resp[j]])
-        F_b_w = b_w * ag[j+1]
-        X_next = np.dot(a_w, X_j) + F_b_w  # 計算下一步狀態
+        F_b_w = b_w * -1 * ag[j+1] * m
+        X_next = np.matmul(a_w, X_j) + F_b_w  # 計算下一步狀態
         u[j + 1], v[j + 1], a_resp[j + 1] = X_next
 
     return u, v, a_resp
