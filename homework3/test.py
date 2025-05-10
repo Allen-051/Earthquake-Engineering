@@ -24,7 +24,7 @@ def compute_structure_parameters(W_kip, k_kip_in, zeta):
     k = k_kip_in * 1000  # lbf/in
     wn = np.sqrt(k / m)
     c = 2 * zeta * m * wn
-    return m, k, c
+    return m, k, c, wn
 
 def read_earthquake_data(file_path):
     """讀取地震歷時資料"""
@@ -124,9 +124,6 @@ def central_difference_method(time, ag, m, k, c, u0, v0, dt):
 
 def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta, wn):
     """改進的 Wilson's θ 方法計算時間歷程分析"""
-    gamma = 0.5
-    beta = 1 / 6
-    theta = 1.4
     npts = len(ag)
     u = np.zeros(npts)
     v = np.zeros(npts)
@@ -135,20 +132,24 @@ def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta, wn):
     # 初始條件
     u[0] = u0
     v[0] = v0
-    a_resp[0] = -2 * c* wn * v[0] -wn**2 * u[0] + ag[0] /m
+    a_resp[0] = -2 * c* wn * v0 -wn**2 * u0 + ag[0] / m
 
     # 預計算常數
-    Beta = 1 + c* wn * theta *dt + 1/6 * wn **2 * theta ** 2 * dt ** 2
-    matrix_A = []
+    beta = 1 + c* wn * theta *dt + 1/6 * wn **2 * theta ** 2 * dt ** 2
+    gamma = c * wn *theta *dt +1/3* wn **2 * theta ** 2 * dt ** 2
+    
+    a_w = np.array([
+    [(beta -1/6*wn**2*theta**2*dt**2)/beta , (beta*dt-1/3*c*wn*theta**2*dt**2-1/6*wn**2*theta**2*dt**3)/beta , (2*beta-theta-gamma+1)*theta*dt**2/(6*beta)],
+    [(-0.5*wn**2*theta*dt)/beta, (beta-c*wn*theta*dt-0.5*wn**2*theta*dt**2)/beta , (beta-theta-gamma+1)*dt/(2*beta)],
+    [-wn**2/beta , (-2 * c * wn - wn**2*dt)/beta , (beta*theta -theta-gamma-beta+1)/(theta*beta)]])
 
-        # 更新位移
-        u[i] = u_theta
-
-        # 更新加速度
-        a_resp[i] = (1 / (beta * dt ** 2)) * (u[i] - u[i - 1] - dt * v[i - 1]) - (1 - 2 * beta) / (2 * beta) * a_resp[i - 1]
-
-        # 更新速度
-        v[i] = v[i - 1] + dt * ((1 - gamma) * a_resp[i - 1] + gamma * a_resp[i])
+    b_w = np.array([(1/6 *theta**2 *dt**2)/(m*beta), (1/2* theta * dt)/(m*beta), (1/m * beta)])
+    
+    for j in range(len(ag) - 1):
+        X_j = np.array([u[j], v[j], a_resp[j]])
+        F_b_w = b_w * ag[j+1]
+        X_next = np.dot(a_w, X_j) + F_b_w  # 計算下一步狀態
+        u[j + 1], v[j + 1], a_resp[j + 1] = X_next
 
     return u, v, a_resp
 
@@ -228,6 +229,7 @@ def plot_results(time, u1, v1, a1, u2, v2, a2, u3, v3, a3, u4, v4, a4, save_path
     plt.title("Displacement vs Time")
     plt.xlabel("Time (s)")
     plt.ylabel("Displacement (in)")
+    plt.xlim(0,6)
     plt.legend()
     plt.grid(True)
     plt.savefig(displacement_path)
@@ -242,6 +244,7 @@ def plot_results(time, u1, v1, a1, u2, v2, a2, u3, v3, a3, u4, v4, a4, save_path
     plt.title("Velocity vs Time")
     plt.xlabel("Time (s)")
     plt.ylabel("Velocity (in/s)")
+    plt.xlim(0,6)
     plt.legend()
     plt.grid(True)
     plt.savefig(velocity_path)
@@ -256,6 +259,7 @@ def plot_results(time, u1, v1, a1, u2, v2, a2, u3, v3, a3, u4, v4, a4, save_path
     plt.title("Acceleration vs Time")
     plt.xlabel("Time (s)")
     plt.ylabel("Acceleration (in/s²)")
+    plt.xlim(0,6)
     plt.legend()
     plt.grid(True)
     plt.savefig(acceleration_path)
@@ -264,7 +268,7 @@ def plot_results(time, u1, v1, a1, u2, v2, a2, u3, v3, a3, u4, v4, a4, save_path
 def main():
     """主程式流程"""
     file_path, save_path, filename, W_kip, k_kip_in, zeta, u0, v0, dt = get_user_input()
-    m, k, c = compute_structure_parameters(W_kip, k_kip_in, zeta)
+    m, k, c, wn= compute_structure_parameters(W_kip, k_kip_in, zeta)
     time, ag = read_earthquake_data(file_path)
 
     # 使用平均加速度法計算
@@ -277,7 +281,7 @@ def main():
     u3, v3, a3 = central_difference_method(time, ag, m, k, c, u0, v0, dt)
 
     # 使用 Wilson's 方法計算
-    u4, v4, a4 = wilsons_theta_method(time, ag, m, k, c, u0, v0, dt)
+    u4, v4, a4 = wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, 1.4, wn)
 
     # 儲存結果到 CSV（僅儲存平均加速度法的結果）
     save_results_to_csv(time, u1, v1, a1, u2, v2, a2, u3, v3, a3, u4, v4, a4, save_path, filename)
