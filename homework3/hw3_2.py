@@ -128,7 +128,7 @@ def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta=1.4):
     # 加速度換算為 in/s²，並計算質量
     g_in_s2 = 386.09
 
-    F_kip = m * ag * g_in_s2  # F = ma
+    p_eff = - m /1000 * ag * g_in_s2  # F = ma
 
     # 初始化
     u = np.zeros(n_steps)
@@ -138,16 +138,16 @@ def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta=1.4):
     # 初始條件
     u[0] = u0
     v[0] = v0
-    a_resp[0] = (F_kip[0] - c * v[0] - k * u[0]) / m
+    a_resp[0] = (p_eff[0] - c * v[0] - k * u[0]) / m
 
     # 有效剛度
     k_eff = k + 3 * c / (theta * dt) + 6 * m / (theta**2 * dt**2)
 
     for i in range(n_steps - 1):
         if i + 1 < n_steps:
-            F_theta = F_kip[i] + theta * (F_kip[i+1] - F_kip[i])
+            F_theta = p_eff[i] + theta * (p_eff[i+1] - p_eff[i])
         else:
-            F_theta = F_kip[i]
+            F_theta = p_eff[i]
 
         rhs = F_theta + \
             m * (6*u[i]/(theta**2*dt**2) + 6*v[i]/(theta*dt) + 2*a_resp[i]) + \
