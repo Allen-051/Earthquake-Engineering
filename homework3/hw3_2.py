@@ -126,9 +126,9 @@ def wilsons_theta_method(time, ag, m, k, c, u0, v0, dt, theta=1.4):
     n_steps = len(ag)
 
     # 加速度換算為 in/s²，並計算質量
-    g_in_s2 = 386.09
+    #g_in_s2 = 386.09
 
-    p_eff = - m /1000 * ag * g_in_s2  # F = ma
+    p_eff = - m  * ag   # F = ma
 
     # 初始化
     u = np.zeros(n_steps)
