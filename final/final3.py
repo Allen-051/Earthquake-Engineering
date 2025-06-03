@@ -138,8 +138,8 @@ def newmark_linear_acceleration(M, K, C, ag, dt):
 
     return U
 
-def peak_mean_RMS_block(u_nodamp, u_tmd, floor_label, file=None):
-    """格式化輸出單一樓層的原結構與加TMD結果及相對誤差"""
+def peak_mean_RMS_block(u_nodamp, u_tmd, floor_label, file=None, u_tmd_disp=None, tmd_num=None):
+    """格式化輸出單一樓層的原結構與加TMD結果及相對誤差，並可輸出TMD本體位移統計"""
     # 原結構
     peak_n = np.max(np.abs(u_nodamp))
     mean_n = np.mean(u_nodamp)
@@ -154,6 +154,16 @@ def peak_mean_RMS_block(u_nodamp, u_tmd, floor_label, file=None):
     err_rms = (rms_t - rms_n) / rms_n * 100 if rms_n != 0 else np.nan
 
     lines = []
+    if tmd_num is not None and u_tmd_disp is not None:
+        # TMD本體位移統計
+        peak_tmd = np.max(np.abs(u_tmd_disp))
+        mean_tmd = np.mean(u_tmd_disp)
+        rms_tmd = np.sqrt(np.mean(u_tmd_disp ** 2))
+        lines.append(f"TMD_{tmd_num}號 阻尼器位移反應：")
+        lines.append(f"  PEAK = {peak_tmd:.6e} m")
+        lines.append(f"  MEAN = {mean_tmd:.6e} m")
+        lines.append(f"  RMS  = {rms_tmd:.6e} m\n")
+
     lines.append(f"***{floor_label}位移反應***")
     lines.append("原結構 結果:")
     lines.append(f"  PEAK = {peak_n:.6e} m")
@@ -172,8 +182,6 @@ def peak_mean_RMS_block(u_nodamp, u_tmd, floor_label, file=None):
     if file is not None:
         for line in lines:
             file.write(line + "\n")
-
-
 
 def plot_graphs_by_floor(save_path, time, U_nodamp, U_damp, tmd_idx):
     floor_names = ["1F", "2F", "3F"]
@@ -211,6 +219,24 @@ def plot_all_tmd_comparison(save_path, time, U_nodamp, U_tmd_list):
         plt.tight_layout()
         plt.savefig(os.path.join(save_path, f"u_compare_{i+1}F.jpg"), dpi=300)
         plt.close()
+
+def plot_tmd_disp_comparison(save_path, time, tmd_disp_list):
+
+    tmd_labels = ["TMD7", "TMD8", "TMD9"]
+    colors = ["blue", "green", "red"]
+    plt.figure(figsize=(10, 5))
+    for i, disp in enumerate(tmd_disp_list):
+        plt.plot(time, disp, label=tmd_labels[i], color=colors[i], linewidth=1)
+    plt.xlabel("Time (s)")
+    plt.ylabel("TMD Displacement (m)")
+    plt.title("三個阻尼器本體位移反應比較")
+    plt.legend()
+    plt.grid(False)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, "TMD_disp_comparison.jpg"), dpi=300)
+    plt.close()
+
+
 # 主程式流程
 def main():
     # 讀取地震加速度資料
@@ -254,7 +280,11 @@ def main():
             print(header)
             f.write(header + "\n")
             for i, floor_label in enumerate(["一樓", "二樓", "三樓"]):
-                peak_mean_RMS_block(U_nodamp[i], U_tmd_main[i], floor_label, file=f)
+                # 只在第一層時輸出TMD本體位移統計，避免重複
+                if i == 0:
+                    peak_mean_RMS_block(U_nodamp[i], U_tmd_main[i], floor_label, file=f, u_tmd_disp=U_tmd[3, :], tmd_num=tmd_num)
+                else:
+                    peak_mean_RMS_block(U_nodamp[i], U_tmd_main[i], floor_label, file=f)
 
             # 畫圖（傳入 tmd_idx 以正確命名）
             plot_graphs_by_floor(save_path, time, U_nodamp, U_tmd_main, tmd_idx)
@@ -268,16 +298,23 @@ def main():
                 "U3_nodamp": U_nodamp[2], "U3_tmd": U_tmd_main[2],
             }).to_csv(result_file, index=False)
 
-        # 畫出所有TMD配置的比較圖
+        # 計算加裝阻尼器之後各樓層的位移反應
         U_tmd_list = []
         for tmd_idx, floor_name in enumerate(["1F", "2F", "3F"]):
             tmd_num = [7, 8, 9][tmd_idx]
             M_tmd, K_tmd, C_tmd = system_matrices_single_tmd(tmd_idx, md_r_list, omega_r_list, zeta_r_list)
             U_tmd = newmark_linear_acceleration(M_tmd, K_tmd, C_tmd, ag, dt)
-            U_tmd_main = U_tmd[:3, :]  # 只取主結構三樓層
+            U_tmd_main = U_tmd[:3, :]  # 只取主結構ㄋ三樓層
             U_tmd_list.append(U_tmd_main)
+        # 計算阻尼器本身的位移反應
+        tmd_disp_list = []
+        for tmd_idx in range(3):
+            M_tmd, K_tmd, C_tmd = system_matrices_single_tmd(tmd_idx, md_r_list, omega_r_list, zeta_r_list)
+            U_tmd = newmark_linear_acceleration(M_tmd, K_tmd, C_tmd, ag, dt)
+            tmd_disp_list.append(U_tmd[3, :])
 
         plot_all_tmd_comparison(save_path, time, U_nodamp, U_tmd_list)
+        plot_tmd_disp_comparison(save_path, time, tmd_disp_list)
 
 if __name__ == "__main__":
     main()
