@@ -121,7 +121,7 @@ def newmark_linear_acceleration(M, K, C, ag, dt):
     V = np.zeros((dof, N))
     A = np.zeros((dof, N))
 
-    beta, gamma = 1 / 4, 1 / 2
+    beta, gamma = 1 / 6, 1 / 2
     A[:, 0] = np.linalg.inv(M) @ (F[:, 0] - C @ V[:, 0] - K @ U[:, 0])
     K_eff = K + gamma / (beta * dt) * C + M / (beta * dt ** 2)
     K_eff_inv = np.linalg.inv(K_eff)
@@ -191,6 +191,7 @@ def plot_graphs_by_floor(save_path, time, U_nodamp, U_damp, tmd_idx):
         plt.figure(figsize=(10, 5))
         plt.plot(time, U_nodamp[i], label=f"{floor_names[i]} 原結構位移", color=colors[i], linestyle='-', linewidth=0.5)
         plt.plot(time, U_damp[i], label=f"{floor_names[i]} 有TMD位移", color=colors[i], linestyle='--', linewidth=1)
+        plt.axhline(0, color='black', linewidth=0.5)  # 在y=0畫黑色細線
         plt.xlabel("Time (s)")
         plt.ylabel("Displacement (m)")
         plt.title(f"{floor_names[i]} 位移比較（TMD{tmd_num}）")
@@ -199,6 +200,26 @@ def plot_graphs_by_floor(save_path, time, U_nodamp, U_damp, tmd_idx):
         plt.tight_layout()
         plt.savefig(os.path.join(save_path, f"u_d{tmd_num}_{i+1}F.jpg"), dpi=300)
         plt.close()
+
+def plot_structure_and_tmd_disp(save_path, time, U_tmd, tmd_num):
+    """
+    畫出結構物一樓、二樓、三樓及單一TMD本體的位移反應（四條線）
+    """
+    floor_names = ["1F", "2F", "3F", f"TMD{tmd_num}"]
+    colors = ["blue", "green", "red", "purple"]
+    plt.figure(figsize=(10, 5))
+    for i in range(3):
+        plt.plot(time, U_tmd[i], label=f"{floor_names[i]} 位移", color=colors[i], linewidth=1)
+    plt.plot(time, U_tmd[3], label=f"{floor_names[3]} 位移", color=colors[3], linewidth=1.5, linestyle="--")
+    plt.axhline(0, color='black', linewidth=0.5)
+    plt.xlabel("Time (s)")
+    plt.ylabel("Displacement (m)")
+    plt.title(f"{floor_names[3]} 加裝於結構物時各樓層與TMD位移比較")
+    plt.legend()
+    plt.grid(False)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, f"u_structure_TMD{tmd_num}.jpg"), dpi=300)
+    plt.close()
 
 def plot_all_tmd_comparison(save_path, time, U_nodamp, U_tmd_list):
     floor_names = ["1F", "2F", "3F"]
@@ -211,6 +232,7 @@ def plot_all_tmd_comparison(save_path, time, U_nodamp, U_tmd_list):
         plt.plot(time, U_nodamp[i], label="原結構", color=colors[0], linestyle=linestyles[0], linewidth=0.5)
         for j, U_tmd_main in enumerate(U_tmd_list):
             plt.plot(time, U_tmd_main[i], label=f"{tmd_labels[j]}", color=colors[j+1], linestyle=linestyles[j+1], linewidth=1)
+        plt.axhline(0, color='black', linewidth=0.5)  # 在y=0畫黑色細線
         plt.xlabel("Time (s)")
         plt.ylabel("Displacement (m)")
         plt.title(f"{floor_names[i]} 各TMD配置位移比較")
@@ -227,6 +249,7 @@ def plot_tmd_disp_comparison(save_path, time, tmd_disp_list):
     plt.figure(figsize=(10, 5))
     for i, disp in enumerate(tmd_disp_list):
         plt.plot(time, disp, label=tmd_labels[i], color=colors[i], linewidth=1)
+    plt.axhline(0, color='black', linewidth=0.5)  # 在y=0畫黑色細線
     plt.xlabel("Time (s)")
     plt.ylabel("TMD Displacement (m)")
     plt.title("三個阻尼器本體位移反應比較")
@@ -255,8 +278,8 @@ def main():
     # 無阻尼結構
     M_nodamp, K_nodamp, C_nodamp = system_matrices_nodamp()
     U_nodamp = newmark_linear_acceleration(M_nodamp, K_nodamp, C_nodamp, ag, dt)
-    
-    # 計算模態向量及週期、omega_n並間隔''輸出
+
+    # 原始結構模態資訊
     modal_shapes, frequencies, omega_n = compute_modal_shapes(M_nodamp, K_nodamp)
     modal_data = pd.DataFrame({
         "Mode": [f"Mode {i+1}" for i in range(len(modal_shapes))],
@@ -265,8 +288,20 @@ def main():
         "Omega_n (rad/s)": omega_n,
         "Modal Shape": [modal_shapes[:, i] for i in range(modal_shapes.shape[1])]
     })
+    print("原始結構模態與頻率：")
     print(modal_data)
-    
+
+    # 收集 modal_info
+    modal_info = []
+    for i in range(len(frequencies)):
+        modal_info.append({
+            "Case": "Original",
+            "Mode": f"Mode {i+1}",
+            "Frequency (Hz)": frequencies[i],
+            "Period (s)": 1 / frequencies[i],
+            "Omega_n (rad/s)": omega_n[i]
+        })
+
     txt_path = os.path.join(save_path, "peak_mean_RMS_RE.txt")
     with open(txt_path, "w", encoding="utf-8") as f:
         # 依序分析三種TMD配置
@@ -275,7 +310,7 @@ def main():
             M_tmd, K_tmd, C_tmd = system_matrices_single_tmd(tmd_idx, md_r_list, omega_r_list, zeta_r_list)
             U_tmd = newmark_linear_acceleration(M_tmd, K_tmd, C_tmd, ag, dt)
             U_tmd_main = U_tmd[:3, :]  # 只取主結構三樓層
-            
+
             header = f"==========TMD_{tmd_num}號=========="
             print(header)
             f.write(header + "\n")
@@ -286,8 +321,30 @@ def main():
                 else:
                     peak_mean_RMS_block(U_nodamp[i], U_tmd_main[i], floor_label, file=f)
 
+            # 加裝TMD後的模態與頻率
+            modal_shapes_tmd, frequencies_tmd, omega_n_tmd = compute_modal_shapes(M_tmd, K_tmd)
+            modal_data_tmd = pd.DataFrame({
+                "Mode": [f"Mode {i+1}" for i in range(len(modal_shapes_tmd))],
+                "Frequency (Hz)": frequencies_tmd,
+                "Period (s)": 1 / frequencies_tmd,
+                "Omega_n (rad/s)": omega_n_tmd,
+                "Modal Shape": [modal_shapes_tmd[:, i] for i in range(modal_shapes_tmd.shape[1])]
+            })
+            print(f"\nTMD_{tmd_num}號加裝後結構物模態與頻率：")
+            print(modal_data_tmd)
+
+            # 收集 modal_info
+            for i in range(len(frequencies_tmd)):
+                modal_info.append({
+                    "Case": f"TMD_{tmd_num}",
+                    "Mode": f"Mode {i+1}",
+                    "Frequency (Hz)": frequencies_tmd[i],
+                    "Period (s)": 1 / frequencies_tmd[i],
+                    "Omega_n (rad/s)": omega_n_tmd[i]
+                })
+
             # 畫圖（傳入 tmd_idx 以正確命名）
-            plot_graphs_by_floor(save_path, time, U_nodamp, U_tmd_main, tmd_idx)
+            plot_structure_and_tmd_disp(save_path, time, U_tmd, tmd_num)
 
             # 儲存
             result_file = os.path.join(save_path, f"u_comparison_{floor_name}_TMD.csv")
@@ -300,11 +357,10 @@ def main():
 
         # 計算加裝阻尼器之後各樓層的位移反應
         U_tmd_list = []
-        for tmd_idx, floor_name in enumerate(["1F", "2F", "3F"]):
-            tmd_num = [7, 8, 9][tmd_idx]
+        for tmd_idx in range(3):
             M_tmd, K_tmd, C_tmd = system_matrices_single_tmd(tmd_idx, md_r_list, omega_r_list, zeta_r_list)
             U_tmd = newmark_linear_acceleration(M_tmd, K_tmd, C_tmd, ag, dt)
-            U_tmd_main = U_tmd[:3, :]  # 只取主結構ㄋ三樓層
+            U_tmd_main = U_tmd[:3, :]
             U_tmd_list.append(U_tmd_main)
         # 計算阻尼器本身的位移反應
         tmd_disp_list = []
@@ -315,6 +371,12 @@ def main():
 
         plot_all_tmd_comparison(save_path, time, U_nodamp, U_tmd_list)
         plot_tmd_disp_comparison(save_path, time, tmd_disp_list)
+
+    # 匯出 modal_info.csv
+    modal_info_df = pd.DataFrame(modal_info)
+    modal_info_path = os.path.join(save_path, "modal_info.csv")
+    modal_info_df.to_csv(modal_info_path, index=False)
+    print(f"\n模態資訊已儲存至：{modal_info_path}")
 
 if __name__ == "__main__":
     main()
